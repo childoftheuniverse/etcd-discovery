@@ -57,5 +57,5 @@ message ExportedServiceUpdateNotification {
 	update of type DELETED, this contains the previous data of the deleted
 	backend record.
 	*/
-	bytes updated_data = 3;
+	ExportedServiceRecord updated_data = 3;
 }

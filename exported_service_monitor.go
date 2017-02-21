@@ -6,6 +6,7 @@ import (
 
 	etcd "github.com/coreos/etcd/clientv3"
 	"github.com/coreos/etcd/mvcc/mvccpb"
+	"github.com/golang/protobuf/proto"
 )
 
 /*
@@ -79,10 +80,19 @@ func (r *exportedServiceMonitor) monitor() {
 	}
 
 	for _, val = range resp.Kvs {
-		var notification = ExportedServiceUpdateNotification{
+		var service = new(ExportedServiceRecord)
+		var notification ExportedServiceUpdateNotification
+
+		err = proto.Unmarshal(val.Value, service)
+		if err != nil {
+			r.receiver.ReportError(err)
+			continue
+		}
+
+		notification = ExportedServiceUpdateNotification{
 			Path:        string(val.Key),
 			Update:      ExportedServiceUpdateNotification_NEW,
-			UpdatedData: val.Value,
+			UpdatedData: service,
 		}
 		r.receiver.ReportChange(&notification)
 	}
@@ -109,18 +119,26 @@ func (r *exportedServiceMonitor) monitor() {
 
 		for _, ev = range wr.Events {
 			if ev.IsCreate() {
-				var notification = ExportedServiceUpdateNotification{
-					Path:        string(ev.Kv.Key),
+				var service = new(ExportedServiceRecord)
+				var notification ExportedServiceUpdateNotification
+
+				err = proto.Unmarshal(val.Value, service)
+				if err != nil {
+					r.receiver.ReportError(err)
+					continue
+				}
+
+				notification = ExportedServiceUpdateNotification{
+					Path:        string(val.Key),
 					Update:      ExportedServiceUpdateNotification_NEW,
-					UpdatedData: ev.Kv.Value,
+					UpdatedData: service,
 				}
 				r.receiver.ReportChange(&notification)
 			} else if ev.Type == mvccpb.DELETE {
 				// Why is there no IsDelete()?!
 				var notification = ExportedServiceUpdateNotification{
-					Path:        string(ev.Kv.Key),
-					Update:      ExportedServiceUpdateNotification_DELETED,
-					UpdatedData: ev.Kv.Value,
+					Path:   string(ev.Kv.Key),
+					Update: ExportedServiceUpdateNotification_DELETED,
 				}
 				r.receiver.ReportChange(&notification)
 			} else {
