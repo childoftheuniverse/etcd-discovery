@@ -1,0 +1,61 @@
+syntax = "proto3";
+
+package discovery;
+
+/*
+ExportedServiceRecord describes the data placed in etcd to provide discovery
+functionality. It contains at least an address and port, but it might later
+be extended with additional hints.
+*/
+message ExportedServiceRecord {
+	/*
+	Protocol type this is exported as.
+	*/
+	string protocol = 1;
+
+	/*
+	Address describes the host address of the host the exported service
+	is running on, without the port.
+	*/
+	string address = 2;
+
+	/*
+	Port describes the port the service is serving on, on the address
+	described above.
+	*/
+	int32 port = 3;
+}
+
+/*
+ExportedServiceUpdateNotification provides information about updates from a
+watched etcd exported service.
+*/
+message ExportedServiceUpdateNotification {
+	/*
+	UpdateType indicates whether the update was because a new entry in the
+	service directory was turned up (NEW) or removed (DELETED).
+	*/
+	enum UpdateType {
+		NEW = 0;
+		DELETED = 1;
+	}
+
+	/*
+	Path describes the path pointing to the exported service being updated.
+	*/
+	string path = 1;
+
+	/*
+	Update points to the type of notification which will indicate what exactly
+	changed about the record in question.
+	*/
+	UpdateType update = 2;
+
+	/*
+	UpdatedData contains the contents of any update (type NEW) for ease of
+	accessing it without having to reload the whole thing. In case of an
+	update of type DELETED, this contains the previous data of the deleted
+	backend record.
+	*/
+	bytes updated_data = 3;
+}
