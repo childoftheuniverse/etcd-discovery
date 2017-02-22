@@ -118,6 +118,8 @@ func (r *exportedServiceMonitor) monitor() {
 		}
 
 		for _, ev = range wr.Events {
+			val = ev.Kv
+
 			if ev.IsCreate() {
 				var service = new(ExportedServiceRecord)
 				var notification ExportedServiceUpdateNotification
@@ -136,9 +138,16 @@ func (r *exportedServiceMonitor) monitor() {
 				r.receiver.ReportChange(&notification)
 			} else if ev.Type == mvccpb.DELETE {
 				// Why is there no IsDelete()?!
+				var service = new(ExportedServiceRecord)
+				err = proto.Unmarshal(ev.PrevKv.Value, service)
+				if err != nil {
+					r.receiver.ReportError(err)
+				}
+
 				var notification = ExportedServiceUpdateNotification{
-					Path:   string(ev.Kv.Key),
-					Update: ExportedServiceUpdateNotification_DELETED,
+					Path:        string(val.Key),
+					Update:      ExportedServiceUpdateNotification_DELETED,
+					UpdatedData: service,
 				}
 				r.receiver.ReportChange(&notification)
 			} else {
