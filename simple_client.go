@@ -1,13 +1,13 @@
 package discovery
 
 import (
-	"context"
 	"net"
 	"strconv"
 	"strings"
 
 	etcd "github.com/coreos/etcd/clientv3"
 	"github.com/golang/protobuf/proto"
+	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 )

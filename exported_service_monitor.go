@@ -1,12 +1,12 @@
 package discovery
 
 import (
-	"context"
 	"fmt"
 
 	etcd "github.com/coreos/etcd/clientv3"
 	"github.com/coreos/etcd/mvcc/mvccpb"
 	"github.com/golang/protobuf/proto"
+	"golang.org/x/net/context"
 )
 
 /*
