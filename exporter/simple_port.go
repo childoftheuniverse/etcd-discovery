@@ -10,6 +10,7 @@ package exporter
 import (
 	"crypto/tls"
 	"fmt"
+	"log"
 	"net"
 	"strconv"
 
@@ -27,11 +28,15 @@ type ServiceExporter struct {
 	conn               *etcd.Client
 	path               string
 	leaseID            etcd.LeaseID
-	keepaliveResponses <-chan *etcd.LeaseKeepAliveResponse
+	keepaliveResponses <-chan etcd.LeaseKeepAliveResponse
 }
 
-func consumeKeepaliveResponses(ch <-chan *etcd.LeaseKeepAliveResponse) {
-	for _ = range ch {
+func consumeKeepaliveResponses(ch <-chan etcd.LeaseKeepAliveResponse) {
+	var resp etcd.LeaseKeepAliveResponse
+	for resp = range ch {
+		if resp.Err != nil {
+			log.Print("Error in keepalive processing: ", resp.Err)
+		}
 	}
 }
 
@@ -61,21 +66,21 @@ func NewExporter(ctx context.Context, etcdURL string, ttl int64) (
 }
 
 /*
-NewExporterFromConfigFile creates a new exporter by reading etcd flags from
-the specified configuration file. This will create a client connection to
+NewExporterFromConfig creates a new exporter by reading etcd flags from
+the specified configuration. This will create a client connection to
 etcd. If the connection is severed, once the etcd lease is going to expire the
 port will stop being exported.
 
 The specified ttl (which must be at least 5 (seconds)) determines how
 frequently the lease will be renewed.
 */
-func NewExporterFromConfigFile(
-	ctx context.Context, config string, ttl int64) (*ServiceExporter, error) {
+func NewExporterFromConfig(ctx context.Context, config etcd.Config, ttl int64) (
+	*ServiceExporter, error) {
 	var self *ServiceExporter
 	var client *etcd.Client
 	var err error
 
-	if client, err = etcd.NewFromConfigFile(config); err != nil {
+	if client, err = etcd.New(config); err != nil {
 		return nil, err
 	}
 
@@ -112,11 +117,8 @@ func (e *ServiceExporter) initLease(ctx context.Context, ttl int64) error {
 		return err
 	}
 
-	if e.keepaliveResponses, err = e.conn.KeepAlive(
-		context.Background(), lease.ID); err != nil {
-		return err
-	}
-
+	e.keepaliveResponses = e.conn.KeepAlive(
+		context.Background(), lease.ID)
 	e.leaseID = lease.ID
 
 	go consumeKeepaliveResponses(e.keepaliveResponses)
