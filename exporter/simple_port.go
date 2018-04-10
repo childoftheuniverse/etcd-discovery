@@ -8,6 +8,7 @@ There are convenience methods for exporting a TLS port and an HTTP service.
 package exporter
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"log"
@@ -17,7 +18,6 @@ import (
 	"github.com/childoftheuniverse/etcd-discovery"
 	etcd "github.com/coreos/etcd/clientv3"
 	"github.com/golang/protobuf/proto"
-	"golang.org/x/net/context"
 )
 
 /*
@@ -28,15 +28,11 @@ type ServiceExporter struct {
 	conn               *etcd.Client
 	path               string
 	leaseID            etcd.LeaseID
-	keepaliveResponses <-chan etcd.LeaseKeepAliveResponse
+	keepaliveResponses <-chan *etcd.LeaseKeepAliveResponse
 }
 
-func consumeKeepaliveResponses(ch <-chan etcd.LeaseKeepAliveResponse) {
-	var resp etcd.LeaseKeepAliveResponse
-	for resp = range ch {
-		if resp.Err != nil {
-			log.Print("Error in keepalive processing: ", resp.Err)
-		}
+func consumeKeepaliveResponses(ch <-chan *etcd.LeaseKeepAliveResponse) {
+	for _ = range ch {
 	}
 }
 
@@ -117,9 +113,13 @@ func (e *ServiceExporter) initLease(ctx context.Context, ttl int64) error {
 		return err
 	}
 
-	e.keepaliveResponses = e.conn.KeepAlive(
+	e.keepaliveResponses, err = e.conn.KeepAlive(
 		context.Background(), lease.ID)
 	e.leaseID = lease.ID
+
+	if err != nil {
+		log.Print("Error establishing keepalive: ", err)
+	}
 
 	go consumeKeepaliveResponses(e.keepaliveResponses)
 
