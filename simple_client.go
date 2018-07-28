@@ -1,6 +1,7 @@
 package discovery
 
 import (
+	"math/rand"
 	"net"
 	"strconv"
 	"strings"
@@ -36,7 +37,7 @@ func NewSimpleClient(ctx context.Context, client etcd.KV, path string) (
 	if path[0] == '/' {
 		realPath = path
 	} else {
-		realPath = "/ns/service/" + realPath
+		realPath = "/ns/service/" + path
 	}
 
 	getResponse, err = client.Get(ctx, realPath, etcd.WithPrefix())
@@ -70,7 +71,7 @@ func NewSimpleClient(ctx context.Context, client etcd.KV, path string) (
 	}
 
 	// Try to connect to different ports at random.
-	configPerms = make([]int, len(configs))
+	configPerms = rand.Perm(len(configs))
 	for _, i := range configPerms {
 		var config = configs[i]
 		var dest = net.JoinHostPort(
