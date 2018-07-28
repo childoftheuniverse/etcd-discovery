@@ -38,9 +38,10 @@ exportedServiceMonitor is used internally to keep track of watchers tracking
 etcd paths for service changes.
 */
 type exportedServiceMonitor struct {
-	basePath   string
-	etcdClient *etcd.Client
-	receiver   ExportedServiceNotificationReceiver
+	basePath    string
+	etcdKV      etcd.KV
+	etcdWatcher etcd.Watcher
+	receiver    ExportedServiceNotificationReceiver
 }
 
 /*
@@ -52,9 +53,10 @@ func MonitorExportedService(
 	etcdClient *etcd.Client, basePath string,
 	receiver ExportedServiceNotificationReceiver) {
 	var mon = &exportedServiceMonitor{
-		basePath:   basePath,
-		etcdClient: etcdClient,
-		receiver:   receiver,
+		basePath:    basePath,
+		etcdKV:      etcdClient,
+		etcdWatcher: etcdClient,
+		receiver:    receiver,
 	}
 
 	go mon.monitor()
@@ -74,7 +76,7 @@ func (r *exportedServiceMonitor) monitor() {
 	/*
 	   First, determine the current state of all objects in the tree.
 	*/
-	if resp, err = r.etcdClient.Get(context.Background(), r.basePath,
+	if resp, err = r.etcdKV.Get(context.Background(), r.basePath,
 		etcd.WithPrefix()); err != nil {
 		r.receiver.ReportError(err)
 	}
@@ -100,8 +102,8 @@ func (r *exportedServiceMonitor) monitor() {
 	/*
 	   Start watching for changes on the specified prefix.
 	*/
-	ch = r.etcdClient.Watch(context.Background(), r.basePath, etcd.WithPrefix(),
-		etcd.WithPrevKV())
+	ch = r.etcdWatcher.Watch(context.Background(), r.basePath,
+		etcd.WithPrefix(), etcd.WithPrevKV())
 
 	for wr = range ch {
 		var ev *etcd.Event

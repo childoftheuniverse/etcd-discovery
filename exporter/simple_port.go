@@ -25,7 +25,8 @@ ServiceExporter exists because we need to initialize our etcd client
 beforehand and keep it somewhere.
 */
 type ServiceExporter struct {
-	conn               *etcd.Client
+	kv                 etcd.KV
+	lease              etcd.Lease
 	path               string
 	leaseID            etcd.LeaseID
 	keepaliveResponses <-chan *etcd.LeaseKeepAliveResponse
@@ -55,7 +56,8 @@ func NewExporter(ctx context.Context, etcdURL string, ttl int64) (
 	}
 
 	self = &ServiceExporter{
-		conn: client,
+		kv:    client,
+		lease: client,
 	}
 
 	return self, self.initLease(ctx, ttl)
@@ -81,7 +83,8 @@ func NewExporterFromConfig(ctx context.Context, config etcd.Config, ttl int64) (
 	}
 
 	self = &ServiceExporter{
-		conn: client,
+		kv:    client,
+		lease: client,
 	}
 
 	return self, self.initLease(ctx, ttl)
@@ -92,10 +95,11 @@ NewExporterFromClient creates a new exporter by reading etcd flags from the
 specified configuration file.
 */
 func NewExporterFromClient(
-	ctx context.Context, client *etcd.Client, ttl int64) (
+	ctx context.Context, kv etcd.KV, lease etcd.Lease, ttl int64) (
 	*ServiceExporter, error) {
 	var rv = &ServiceExporter{
-		conn: client,
+		kv:    kv,
+		lease: lease,
 	}
 
 	return rv, rv.initLease(ctx, ttl)
@@ -109,11 +113,11 @@ func (e *ServiceExporter) initLease(ctx context.Context, ttl int64) error {
 	var lease *etcd.LeaseGrantResponse
 	var err error
 
-	if lease, err = e.conn.Grant(ctx, ttl); err != nil {
+	if lease, err = e.lease.Grant(ctx, ttl); err != nil {
 		return err
 	}
 
-	e.keepaliveResponses, err = e.conn.KeepAlive(
+	e.keepaliveResponses, err = e.lease.KeepAlive(
 		context.Background(), lease.ID)
 	e.leaseID = lease.ID
 
@@ -173,7 +177,7 @@ func (e *ServiceExporter) NewExportedPort(
 	}
 
 	// Now write our host:port pair to etcd. Let etcd choose the file name.
-	if _, err = e.conn.Put(ctx, path, string(recordData),
+	if _, err = e.kv.Put(ctx, path, string(recordData),
 		etcd.WithLease(e.leaseID)); err != nil {
 		return nil, err
 	}
@@ -215,7 +219,7 @@ func (e *ServiceExporter) UnexportPort(ctx context.Context) error {
 		return nil
 	}
 
-	if _, err = e.conn.Delete(ctx, e.path); err != nil {
+	if _, err = e.kv.Delete(ctx, e.path); err != nil {
 		return err
 	}
 

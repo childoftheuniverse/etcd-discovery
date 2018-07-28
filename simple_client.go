@@ -12,6 +12,8 @@ import (
 	"google.golang.org/grpc/codes"
 )
 
+var netDial = net.Dial
+
 /*
 NewSimpleClient determines the correct connection endpoints matching the
 specified path and attempts to connect to them. If multiple destinations
@@ -22,7 +24,7 @@ connection errors the target is skipped and the next one is attempted.
 The connections returned are regular connections, if they are interrupted
 they will not be reestablished.
 */
-func NewSimpleClient(ctx context.Context, client *etcd.Client, path string) (
+func NewSimpleClient(ctx context.Context, client etcd.KV, path string) (
 	net.Conn, error) {
 	var configs []*ExportedServiceRecord
 	var configPerms []int
@@ -74,7 +76,7 @@ func NewSimpleClient(ctx context.Context, client *etcd.Client, path string) (
 		var dest = net.JoinHostPort(
 			config.Address, strconv.Itoa(int(config.Port)))
 
-		conn, err = net.Dial(config.Protocol, dest)
+		conn, err = netDial(config.Protocol, dest)
 		if err == nil {
 			return conn, err
 		}
