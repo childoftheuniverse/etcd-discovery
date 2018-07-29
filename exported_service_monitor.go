@@ -56,12 +56,12 @@ baseString in the specified etcdClient. See the documentation of the
 ExportedServiceNotificationReceiver interface for more details.
 */
 func MonitorExportedService(
-	etcdClient *etcd.Client, basePath string,
+	kv etcd.KV, watcher etcd.Watcher, basePath string,
 	receiver ExportedServiceNotificationReceiver) {
 	var mon = &exportedServiceMonitor{
 		basePath:    basePath,
-		etcdKV:      etcdClient,
-		etcdWatcher: etcdClient,
+		etcdKV:      kv,
+		etcdWatcher: watcher,
 		receiver:    receiver,
 	}
 
