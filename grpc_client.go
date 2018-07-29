@@ -12,6 +12,8 @@ import (
 	"google.golang.org/grpc/codes"
 )
 
+var grpcDialContext = grpc.DialContext
+
 /*
 NewGrpcClient attempts to establish grpc client connections with the specified
 options to the endpoints connected with the etcd prefix. If multiple
@@ -23,7 +25,7 @@ attempted.
 Once established, aborted connections will not be reestablished to a different
 endpoint.
 */
-func NewGrpcClient(ctx context.Context, client *etcd.Client, path string,
+func NewGrpcClient(ctx context.Context, client etcd.KV, path string,
 	opts ...grpc.DialOption) (*grpc.ClientConn, error) {
 	var configs []*ExportedServiceRecord
 	var configPerms []int
@@ -75,7 +77,7 @@ func NewGrpcClient(ctx context.Context, client *etcd.Client, path string,
 		var dest = net.JoinHostPort(
 			config.Address, strconv.Itoa(int(config.Port)))
 
-		conn, err = grpc.Dial(dest, opts...)
+		conn, err = grpcDialContext(ctx, dest, opts...)
 		if err == nil {
 			return conn, err
 		}
