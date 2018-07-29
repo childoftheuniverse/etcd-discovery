@@ -31,6 +31,12 @@ type ExportedServiceNotificationReceiver interface {
 	   event is fired, listening to modifications will stop.
 	*/
 	ReportFatal(error)
+
+	/*
+	   ReportCancelled reports that the watcher has been cancelled, which can be
+	   used as a signal to the notification receiver to shut down.
+	*/
+	ReportCancelled()
 }
 
 /*
@@ -60,6 +66,14 @@ func MonitorExportedService(
 	}
 
 	go mon.monitor()
+}
+
+/*
+StopMonitoringExportedServices stops monitoring _all_ exported services as well
+as any other watchers registered on the specified etcd server.
+*/
+func StopMonitoringExportedServices(watcher etcd.Watcher) error {
+	return watcher.Close()
 }
 
 /*
@@ -109,13 +123,18 @@ func (r *exportedServiceMonitor) monitor() {
 		var ev *etcd.Event
 
 		if wr.Err() != nil {
-			r.receiver.ReportError(wr.Err())
+			if wr.Canceled {
+				r.receiver.ReportFatal(wr.Err())
+			} else {
+				r.receiver.ReportError(wr.Err())
+			}
 			continue
 		}
 
 		if wr.Canceled {
-			r.receiver.ReportFatal(fmt.Errorf(
-				"etcd exported node discovery watcher canceled"))
+			// We can assume the event is a pure cancellation as otherwise
+			// the above wr.Err() code would have triggered.
+			r.receiver.ReportCancelled()
 			return
 		}
 
