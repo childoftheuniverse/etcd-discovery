@@ -158,27 +158,32 @@ func (e *ServiceExporter) NewExportedPort(
 
 	// Use the lease ID as part of the path; it would be reasonable to expect
 	// it to be unique.
-	path = fmt.Sprintf("/ns/service/%s/%16x", service, e.leaseID)
+	path = fmt.Sprintf("/ns/service/%s/%016x", service, e.leaseID)
 
 	if host, hostport, err = net.SplitHostPort(l.Addr().String()); err != nil {
+		l.Close()
 		return nil, err
 	}
 
 	// Fill in discovery protocol buffer.
+	record.Protocol = "tcp"
 	record.Address = host
 	if port, err = strconv.Atoi(hostport); err != nil {
 		// Probably a named port. TODO: should be looked up in /etc/services.
+		l.Close()
 		return nil, err
 	}
 	record.Port = int32(port)
 
 	if recordData, err = proto.Marshal(&record); err != nil {
+		l.Close()
 		return nil, err
 	}
 
 	// Now write our host:port pair to etcd. Let etcd choose the file name.
 	if _, err = e.kv.Put(ctx, path, string(recordData),
 		etcd.WithLease(e.leaseID)); err != nil {
+		l.Close()
 		return nil, err
 	}
 
