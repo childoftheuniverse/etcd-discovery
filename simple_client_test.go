@@ -100,6 +100,49 @@ func TestNewSimpleClient_FullPath_Success(t *testing.T) {
 	}
 }
 
+func TestNewSimpleClient_FullPathWithTrailingSlash(t *testing.T) {
+	controller := gomock.NewController(t)
+	oldNetDial := net.Dial
+	mockDialer := mock_net.NewMockDialer(controller)
+	mockKV := mock_etcd.NewMockKV(controller)
+	mockConnection := mock_net.NewMockConn(controller)
+	netDial = mockDialer.Dial
+	defer func() { netDial = oldNetDial }()
+
+	ctx := context.TODO()
+
+	service := ExportedServiceRecord{
+		Protocol: "test",
+		Address:  "localhost",
+		Port:     423,
+	}
+	pbData, err := proto.Marshal(&service)
+	if err != nil {
+		t.Error("Unable to encode test data: ", err)
+	}
+
+	mockKV.EXPECT().Get(ctx, "/this/is/a/full/", gomock.Any()).Return(
+		&clientv3.GetResponse{
+			Kvs: []*mvccpb.KeyValue{
+				&mvccpb.KeyValue{
+					Key:   []byte("/this/is/a/full/path"),
+					Value: pbData,
+				},
+			},
+			Count: 1,
+		}, nil)
+	mockDialer.EXPECT().Dial("test", "localhost:423").Return(
+		mockConnection, nil)
+
+	conn, err := NewSimpleClient(ctx, mockKV, "/this/is/a/full/")
+	if err != nil {
+		t.Error("Received unexpected error from NewSimpleClient: ", err)
+	}
+	if conn == nil {
+		t.Error("Received nil connection")
+	}
+}
+
 func TestNewSimpleClient_MultiplePaths(t *testing.T) {
 	controller := gomock.NewController(t)
 	oldNetDial := net.Dial
@@ -198,6 +241,31 @@ func TestNewSimpleClient_EtcdContentsGarbled(t *testing.T) {
 					Value: []byte("Whazzup bruh"),
 				},
 			},
+			Count: 1,
+		}, nil)
+
+	conn, err := NewSimpleClient(ctx, mockKV, "test")
+	if err == nil {
+		t.Error("NewSimpleClient succeeds despite expected decoding errors?")
+	}
+	if conn != nil {
+		t.Error("Received non-nil connection")
+	}
+}
+
+func TestNewSimpleClient_EtcdNoResults(t *testing.T) {
+	controller := gomock.NewController(t)
+	oldNetDial := net.Dial
+	mockDialer := mock_net.NewMockDialer(controller)
+	mockKV := mock_etcd.NewMockKV(controller)
+	netDial = mockDialer.Dial
+	defer func() { netDial = oldNetDial }()
+
+	ctx := context.TODO()
+
+	mockKV.EXPECT().Get(ctx, "/ns/service/test", gomock.Any()).Return(
+		&clientv3.GetResponse{
+			Kvs:   []*mvccpb.KeyValue{},
 			Count: 1,
 		}, nil)
 
