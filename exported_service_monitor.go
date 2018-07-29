@@ -58,8 +58,15 @@ ExportedServiceNotificationReceiver interface for more details.
 func MonitorExportedService(
 	kv etcd.KV, watcher etcd.Watcher, basePath string,
 	receiver ExportedServiceNotificationReceiver) {
+	var path string
+
+	if basePath[0] == '/' {
+		path = basePath
+	} else {
+		path = "/ns/service/" + basePath
+	}
 	var mon = &exportedServiceMonitor{
-		basePath:    basePath,
+		basePath:    path,
 		etcdKV:      kv,
 		etcdWatcher: watcher,
 		receiver:    receiver,
@@ -95,22 +102,24 @@ func (r *exportedServiceMonitor) monitor() {
 		r.receiver.ReportError(err)
 	}
 
-	for _, val = range resp.Kvs {
-		var service = new(ExportedServiceRecord)
-		var notification ExportedServiceUpdateNotification
+	if resp != nil {
+		for _, val = range resp.Kvs {
+			var service = new(ExportedServiceRecord)
+			var notification ExportedServiceUpdateNotification
 
-		err = proto.Unmarshal(val.Value, service)
-		if err != nil {
-			r.receiver.ReportError(err)
-			continue
-		}
+			err = proto.Unmarshal(val.Value, service)
+			if err != nil {
+				r.receiver.ReportError(err)
+				continue
+			}
 
-		notification = ExportedServiceUpdateNotification{
-			Path:        string(val.Key),
-			Update:      ExportedServiceUpdateNotification_NEW,
-			UpdatedData: service,
+			notification = ExportedServiceUpdateNotification{
+				Path:        string(val.Key),
+				Update:      ExportedServiceUpdateNotification_NEW,
+				UpdatedData: service,
+			}
+			r.receiver.ReportChange(&notification)
 		}
-		r.receiver.ReportChange(&notification)
 	}
 
 	/*
@@ -122,28 +131,27 @@ func (r *exportedServiceMonitor) monitor() {
 	for wr = range ch {
 		var ev *etcd.Event
 
-		if wr.Err() != nil {
-			if wr.Canceled {
-				r.receiver.ReportFatal(wr.Err())
-			} else {
-				r.receiver.ReportError(wr.Err())
-			}
+		if wr.Err() != nil && !wr.Canceled {
+			r.receiver.ReportError(wr.Err())
 			continue
 		}
 
 		if wr.Canceled {
-			// We can assume the event is a pure cancellation as otherwise
-			// the above wr.Err() code would have triggered.
-			r.receiver.ReportCancelled()
+			err = wr.Err()
+			if err == nil {
+				r.receiver.ReportCancelled()
+			} else {
+				r.receiver.ReportFatal(err)
+			}
 			return
 		}
 
 		for _, ev = range wr.Events {
-			val = ev.Kv
-
 			if ev.IsCreate() {
 				var service = new(ExportedServiceRecord)
 				var notification ExportedServiceUpdateNotification
+
+				val = ev.Kv
 
 				err = proto.Unmarshal(val.Value, service)
 				if err != nil {
@@ -160,9 +168,12 @@ func (r *exportedServiceMonitor) monitor() {
 			} else if ev.Type == mvccpb.DELETE {
 				// Why is there no IsDelete()?!
 				var service = new(ExportedServiceRecord)
-				err = proto.Unmarshal(ev.PrevKv.Value, service)
+				val = ev.PrevKv
+
+				err = proto.Unmarshal(val.Value, service)
 				if err != nil {
 					r.receiver.ReportError(err)
+					continue
 				}
 
 				var notification = ExportedServiceUpdateNotification{
